@@ -8,8 +8,28 @@
     let
       pkgs = nixpkgs.legacyPackages.x86_64-linux;
       system = "x86_64-linux";
+      lib = pkgs.lib;
     in
     {
+      packages.${system}.default = pkgs.stdenv.mkDerivation {
+        pname = "yapper";
+        version = "0.1.0";
+
+        src = lib.fileset.toSource {
+          root = ./.;
+          fileset = lib.fileset.unions [
+            ./CMakeLists.txt
+            ./include
+          ];
+        };
+
+        dontBuild = true;
+
+        nativeBuildInputs = with pkgs; [
+          cmake
+        ];
+      };
+
       devShells.${system}.default = pkgs.mkShell {
         packages = with pkgs; [
           gcc16
