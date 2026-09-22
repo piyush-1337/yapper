@@ -91,57 +91,62 @@ inline RingBuffer::RingBuffer(std::size_t capacity)
 
 inline auto RingBuffer::claim(std::size_t payload_size) -> std::byte* {
   payload_size = (payload_size + 7) & ~7;
-  const auto total_size = std::size_t{sizeof(MessageHeader) + payload_size};
+  const auto needed_size = std::size_t{sizeof(MessageHeader) + payload_size};
 
-  if (m_producer.working_tail == m_capacity) m_producer.working_tail = 0;
+  auto bytes_to_end = std::size_t{m_capacity - m_producer.working_tail};
+  // even if head isn't in between can we fit the payload from current tail to
+  // the end continuously?
+  bool needs_wrap = needed_size > bytes_to_end;
 
-  // tail to end of array
-  auto cont_avail = std::size_t{m_capacity - m_producer.working_tail};
+  auto has_space = [&]() -> bool {
+    if (needs_wrap) {
+      // can't wrap when tail < head
+      // head first needs to consume the data, only then we can wrap
+      if (m_producer.working_tail < m_producer.cached_head) return false;
 
-  // tiny space at the end
-  if (total_size > cont_avail) {
-    // add skip header
-    if (cont_avail > 0) {
+      // wrapping to 0 requires head > 0 to maintain 8 byte gap
+      if (m_producer.cached_head == 0) return false;
+
+      // leave 8 byte gap to prevent tail catching head
+      return needed_size + 8 <= m_producer.cached_head;
+    } else {
+      if (m_producer.working_tail >= m_producer.cached_head) {
+        // tail is ahead of head, prevent tail from hitting capacity and
+        // wrapping to 0 if head is 0
+        std::size_t max_allowed =
+            m_capacity - (m_producer.cached_head == 0 ? 8 : 0);
+        return m_producer.working_tail + needed_size <= max_allowed;
+      } else {
+        // tail is behind head, leave 8 byte gap
+        return m_producer.working_tail + needed_size <=
+               m_producer.cached_head - 8;
+      }
+    }
+  };
+
+  // verify space before mutating state
+  if (!has_space()) {
+    m_producer.cached_head =
+        m_consumer.published_head.load(std::memory_order_acquire);
+    if (!has_space()) {
+      return nullptr;
+    }
+  }
+
+  // guaranteed space, safe to mutate state
+  if (needs_wrap) {
+    if (bytes_to_end > 0) {
       auto skip_msg = MessageHeader{
-          .size = static_cast<uint32_t>(cont_avail - sizeof(MessageHeader)),
+          .size = static_cast<uint32_t>(bytes_to_end - sizeof(MessageHeader)),
           .skip = true,
       };
       std::memcpy(m_buffer.get() + m_producer.working_tail, &skip_msg,
                   sizeof(MessageHeader));
     }
-
-    // start at the beginning
     m_producer.working_tail = 0;
   }
 
-  // check if tail is behind head and there is no space
-  if (m_producer.working_tail < m_producer.cached_head &&
-      m_producer.working_tail + total_size >= m_producer.cached_head) {
-    // refresh the cached_head
-    m_producer.cached_head =
-        m_consumer.published_head.load(std::memory_order_acquire);
-
-    // check if there is truly no space left
-    if (m_producer.working_tail < m_producer.cached_head &&
-        m_producer.working_tail + total_size >= m_producer.cached_head)
-      return nullptr;
-  }
-
-  // check if you are writing something that's greater than the remaining size
-  if (m_producer.working_tail >= m_producer.cached_head &&
-      m_producer.working_tail + total_size >=
-          m_capacity + m_producer.cached_head) {
-    m_producer.cached_head =
-        m_consumer.published_head.load(std::memory_order_acquire);
-
-    if (m_producer.working_tail >= m_producer.cached_head &&
-        m_producer.working_tail + total_size >=
-            m_capacity + m_producer.cached_head) {
-      return nullptr;
-    }
-  }
-
-  // claim size for the actual payload
+  // write payload header
   auto msg = MessageHeader{
       .size = static_cast<uint32_t>(payload_size),
       .skip = false,
@@ -151,7 +156,11 @@ inline auto RingBuffer::claim(std::size_t payload_size) -> std::byte* {
   std::memcpy(header_ptr, &msg, sizeof(MessageHeader));
 
   auto payload_ptr = header_ptr + sizeof(MessageHeader);
-  m_producer.working_tail += total_size;
+  m_producer.working_tail += needed_size;
+
+  if (m_producer.working_tail == m_capacity) {
+    m_producer.working_tail = 0;
+  }
 
   return payload_ptr;
 }
@@ -186,6 +195,10 @@ inline auto RingBuffer::peek() -> std::tuple<std::byte*, std::size_t> {
 
 inline auto RingBuffer::pop(std::size_t payload_size) -> void {
   m_consumer.working_head += sizeof(MessageHeader) + payload_size;
+
+  if (m_consumer.working_head == m_capacity) {
+    m_consumer.working_head = 0;
+  }
 
   m_consumer.published_head.store(m_consumer.working_head,
                                   std::memory_order_release);

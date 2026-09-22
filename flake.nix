@@ -39,6 +39,8 @@
 
           llvmPackages_latest.clang-tools
           neocmakelsp
+
+          catch2_3
         ];
       };
     };
