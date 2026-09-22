@@ -65,6 +65,15 @@ class RingBuffer {
 
   // try to claim the slot to write payload
   auto claim(std::size_t payload_size) -> std::byte*;
+
+  // after the data is written, signal the consumer
+  auto commit() -> void;
+
+  // returns pointer to valid payload if exists
+  auto peek() -> std::tuple<std::byte*, std::size_t>;
+
+  // pop :)
+  auto pop(std::size_t payload_size) -> void;
 };
 
 inline auto RingBuffer::create(std::size_t capacity)
@@ -145,6 +154,41 @@ inline auto RingBuffer::claim(std::size_t payload_size) -> std::byte* {
   m_producer.working_tail += total_size;
 
   return payload_ptr;
+}
+
+inline auto RingBuffer::commit() -> void {
+  m_producer.published_tail.store(m_producer.working_tail,
+                                  std::memory_order_release);
+}
+
+inline auto RingBuffer::peek() -> std::tuple<std::byte*, std::size_t> {
+  if (m_consumer.working_head == m_consumer.cached_tail) {
+    m_consumer.cached_tail =
+        m_producer.published_tail.load(std::memory_order_acquire);
+
+    if (m_consumer.working_head == m_consumer.cached_tail) {
+      return {nullptr, 0};
+    }
+  }
+
+  auto* msg = reinterpret_cast<MessageHeader*>(m_buffer.get() +
+                                               m_consumer.working_head);
+
+  if (msg->skip) {
+    m_consumer.working_head = 0;
+    msg = reinterpret_cast<MessageHeader*>(m_buffer.get() +
+                                           m_consumer.working_head);
+  }
+
+  return {m_buffer.get() + m_consumer.working_head + sizeof(MessageHeader),
+          msg->size};
+}
+
+inline auto RingBuffer::pop(std::size_t payload_size) -> void {
+  m_consumer.working_head += sizeof(MessageHeader) + payload_size;
+
+  m_consumer.published_head.store(m_consumer.working_head,
+                                  std::memory_order_release);
 }
 
 }  // namespace yapper::details
