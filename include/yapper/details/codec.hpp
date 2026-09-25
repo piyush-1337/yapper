@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstring>
 #include <string_view>
+#include <tuple>
 #include <type_traits>
 
 namespace yapper::details {
@@ -30,6 +31,8 @@ auto calculate_payload_size(const Args&... args) -> std::size_t {
   return 16 + (0 + ... + encoded_size(args));
 }
 
+// encoders
+
 template <typename T>
   requires std::is_trivially_copyable_v<T> &&
            (!std::is_convertible_v<T, std::string_view>)
@@ -52,6 +55,28 @@ auto encode_arg(std::byte* cursor, const T& arg) -> std::byte* {
 template <typename... Args>
 auto encode_all(std::byte* cursor, const Args&... args) -> void {
   ((cursor = encode_arg(cursor, args)), ...);
+}
+
+// decoders
+
+template <typename T>
+  requires std::is_trivially_copyable_v<T> &&
+           (!std::is_convertible_v<T, std::string_view>)
+auto decode_arg(const std::byte* cursor) -> std::tuple<T, const std::byte*> {
+  T arg;
+  std::memcpy(&arg, cursor, sizeof(arg));
+  return {arg, cursor + align_to_8(sizeof(arg))};
+}
+
+template <typename T>
+  requires std::is_convertible_v<T, std::string_view>
+auto decode_arg(const std::byte* cursor)
+    -> std::tuple<std::string_view, const std::byte*> {
+  std::size_t size;
+  std::memcpy(&size, cursor, sizeof(size));
+
+  auto sv = std::string_view{reinterpret_cast<const char*>(cursor + 8), size};
+  return {sv, cursor + 8 + align_to_8(size)};
 }
 
 }  // namespace yapper::details
