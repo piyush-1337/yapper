@@ -20,7 +20,10 @@ install(EXPORT yapperTargets
     NAMESPACE yapper::
     DESTINATION ${CMAKE_INSTALL_DATADIR}/cmake/yapper)
 
-add_subdirectory(examples)
+option(BUILD_EXAMPLES "Build examples" ON)
+if (BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
 
 # testing
 option(BUILD_TESTS "Build the test suite" OFF)
