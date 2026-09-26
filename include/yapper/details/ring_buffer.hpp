@@ -86,8 +86,8 @@ inline auto RingBuffer::create(std::size_t capacity)
 }
 
 inline RingBuffer::RingBuffer(std::size_t capacity)
-    : m_capacity(capacity),
-      m_buffer(std::make_unique_for_overwrite<std::byte[]>(capacity)) {}
+    : m_capacity{capacity},
+      m_buffer{std::make_unique_for_overwrite<std::byte[]>(capacity)} {}
 
 inline auto RingBuffer::claim(std::size_t payload_size) -> std::byte* {
   payload_size = (payload_size + 7) & ~7;
