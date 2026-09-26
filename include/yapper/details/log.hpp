@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <cstring>
 #include <format>
-#include <print>
 #include <tuple>
 #include <yapper/details/codec.hpp>
 
