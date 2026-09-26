@@ -49,9 +49,9 @@ class RingBuffer {
   std::size_t m_capacity;
   std::unique_ptr<std::byte[]> m_buffer;
 
+ public:
   explicit RingBuffer(std::size_t);
 
- public:
   static auto create(std::size_t capacity)
       -> std::expected<std::unique_ptr<RingBuffer>, std::string>;
 
