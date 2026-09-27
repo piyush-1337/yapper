@@ -19,15 +19,6 @@ class Yapper {
  public:
   Yapper(FILE* file, std::size_t rb_size);
 
-  // defaults to stdout/stderr
-  static auto init() -> std::expected<Yapper, std::string>;
-  static auto init(std::size_t) -> std::expected<Yapper, std::string>;
-
-  // log to some file
-  static auto init(std::filesystem::path) -> std::expected<Yapper, std::string>;
-  static auto init(std::filesystem::path, std::size_t)
-      -> std::expected<Yapper, std::string>;
-
   template <typename... Args>
   auto log(std::format_string<Args...> fmt, const Args&... args) -> void;
 
@@ -79,26 +70,26 @@ auto Yapper::log(std::format_string<Args...> fmt, const Args&... args) -> void {
 
 constexpr std::size_t DEFAULT_RB_SIZE = 1024 * 1024;  // 1MB
 
-inline auto Yapper::init() -> std::expected<Yapper, std::string> {
-  return init(DEFAULT_RB_SIZE);
-}
-
-inline auto Yapper::init(std::size_t rb_size)
-    -> std::expected<Yapper, std::string> {
-  return std::expected<Yapper, std::string>(std::in_place, stdout, rb_size);
-}
-
-inline auto Yapper::init(std::filesystem::path path)
-    -> std::expected<Yapper, std::string> {
-  return init(std::move(path), DEFAULT_RB_SIZE);
-}
-
-inline auto Yapper::init(std::filesystem::path path, std::size_t rb_size)
+inline auto create(std::filesystem::path path, std::size_t rb_size)
     -> std::expected<Yapper, std::string> {
   FILE* file = ::fopen(path.string().c_str(), "a");
   if (!file) return std::unexpected("Failed to open file: " + path.string());
 
   return std::expected<Yapper, std::string>(std::in_place, file, rb_size);
+}
+
+inline auto create(std::filesystem::path path)
+    -> std::expected<Yapper, std::string> {
+  return create(std::move(path), DEFAULT_RB_SIZE);
+}
+
+inline auto create(std::size_t rb_size)
+    -> std::expected<Yapper, std::string> {
+  return std::expected<Yapper, std::string>(std::in_place, stdout, rb_size);
+}
+
+inline auto create() -> std::expected<Yapper, std::string> {
+  return create(DEFAULT_RB_SIZE);
 }
 
 inline Yapper::Yapper(FILE* file, std::size_t rb_size)

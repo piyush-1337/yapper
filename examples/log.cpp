@@ -1,10 +1,10 @@
 #include <yapper/yapper.hpp>
 
 int main(int argc, char* argv[]) {
-  auto yapper = yapper::Yapper::init();
+  auto yapper = yapper::create();
   for (int i{}; i < 10; i++) {
     yapper->log("[YAPPER]: Hello this is from {} and the number is {}",
-                "piyush", i);
+                "yapper", i);
   }
   return 0;
 }
