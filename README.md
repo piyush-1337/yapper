@@ -14,18 +14,13 @@ A high performace, ultra low latency, zero allocation, lock-free asynchronous lo
 ```cpp
 #include <yapper/yapper.hpp>
 
-int main() {
-    // Initialize Yapper (defaults to stdout with a 1MB ring buffer)
-    auto yapper = yapper::Yapper::init();
-    if (!yapper) {
-        return 1;
-    }
-
-    for (int i = 0; i < 10; ++i) {
-        yapper->log("[YAPPER]: Hello from {} and the number is {}", "yapper", i);
-    }
-
-    return 0;
+int main(int argc, char* argv[]) {
+  auto yapper = yapper::create();
+  for (int i{}; i < 10; i++) {
+    yapper->log("[YAPPER]: Hello this is from {} and the number is {}",
+                "yapper", i);
+  }
+  return 0;
 }
 ```
 
